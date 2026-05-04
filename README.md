@@ -11,6 +11,7 @@ If you do use this plugin in an older Cordova version (again, not recommended), 
 This plugin was based on this Apache [project](https://github.com/apache/cordova-plugins/tree/master/keyboard) and has a compatible API.
 
 - [Installation](#installation)
+- [Important namespace note](#important-namespace-note)
 - [Methods](#methods)
     - [cordova.plugins.Keyboard.shrinkView](#cordovapluginskeyboardshrinkview)
     - [cordova.plugins.Keyboard.hideFormAccessoryBar](#cordovapluginskeyboardhideformaccessorybar)
@@ -26,6 +27,7 @@ This plugin was based on this Apache [project](https://github.com/apache/cordova
     - [keyboardWillShow](#keyboardwillshow)
     - [keyboardWillHide](#keyboardwillhide)
     - [keyboardHeightWillChange](#keyboardheightwillchange)
+- [Troubleshooting iOS events](#troubleshooting-ios-events)
 - [Releases](#releases) 
 
 # Installation
@@ -37,6 +39,16 @@ From [npm](https://www.npmjs.com/package/cordova-plugin-keyboard) (stable)
 From github latest (may not be stable)
 
 `cordova plugin add https://github.com/cjpearson/cordova-plugin-keyboard`
+
+# Important namespace note
+
+Use `cordova.plugins.Keyboard` as the primary JavaScript API:
+
+    cordova.plugins.Keyboard.hide();
+
+The legacy `window.Keyboard` alias is still exported for compatibility, but application code should not depend on it. Some applications or bundlers may define their own `window.Keyboard` object, which can break keyboard event delivery if native code calls the legacy global directly.
+
+On iOS, this plugin dispatches native keyboard notifications through `cordova.plugins.Keyboard` first and falls back to `window.Keyboard` only for older integrations. If neither helper is available, it dispatches the window event directly through `cordova.fireWindowEvent`.
 
 # Methods
 
@@ -267,8 +279,44 @@ Attach handler to this event to be able to receive notification when keyboard is
 - iOS
 
 
+# Troubleshooting iOS events
+
+If methods such as `cordova.plugins.Keyboard.hide()` work, but `keyboardDidShow`, `keyboardDidHide`, `keyboardWillShow`, or `keyboardWillHide` do not fire, check the following:
+
+1. Register listeners after the Cordova `deviceready` event.
+
+        document.addEventListener('deviceready', function () {
+            window.addEventListener('keyboardDidShow', function () {
+                console.log('keyboardDidShow');
+            });
+        });
+
+2. Verify that the plugin is present in the built app:
+
+        cordova plugin ls
+
+3. Verify that `cordova.plugins.Keyboard` exists at runtime:
+
+        document.addEventListener('deviceready', function () {
+            console.log(!!cordova.plugins.Keyboard);
+        });
+
+4. Check whether application code overwrites `window.Keyboard`. The supported namespace is `cordova.plugins.Keyboard`; `window.Keyboard` is only a compatibility alias.
+
+5. For iOS builds, make sure `CDVKeyboard` is registered in the generated Cordova config and that the app is rebuilt after plugin changes:
+
+        cordova platform rm ios
+        cordova platform add ios
+        cordova build ios
+
+When diagnosing a packaged `.ipa`, inspect `www/cordova_plugins.js` and the generated Cordova config inside the app bundle to confirm that `cordova-plugin-keyboard`, `www/keyboard.js`, and the `Keyboard` feature are included.
+
+
 # Releases
 
+- Unreleased
+    - Dispatch iOS keyboard events through `cordova.plugins.Keyboard` first.
+    - Fall back to direct `cordova.fireWindowEvent` dispatch if the plugin helper namespace is unavailable.
 - 1.0.0 
     - Initial NPM release
     - Fix issues with external keyboards
