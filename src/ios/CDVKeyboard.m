@@ -29,6 +29,9 @@
 
 @property (nonatomic, readwrite, assign) BOOL keyboardIsVisible;
 
+- (void)evalKeyboardEventWithMethod:(NSString*)method fallbackEvent:(NSString*)eventName;
+- (void)evalKeyboardHeightWillChangeWithHeight:(CGFloat)height;
+
 @end
 
 @implementation CDVKeyboard
@@ -36,6 +39,30 @@
 - (id)settingForKey:(NSString*)key
 {
     return [self.commandDelegate.settings objectForKey:[key lowercaseString]];
+}
+
+- (void)evalKeyboardEventWithMethod:(NSString*)method fallbackEvent:(NSString*)eventName
+{
+    NSString* js = [NSString stringWithFormat:
+        @"(function(){"
+         "var k=(window.cordova&&cordova.plugins&&cordova.plugins.Keyboard)||window.Keyboard;"
+         "if(k&&typeof k.%@==='function'){k.%@();return;}"
+         "if(window.cordova&&typeof cordova.fireWindowEvent==='function'){cordova.fireWindowEvent('%@');}"
+         "})();", method, method, eventName];
+
+    [self.commandDelegate evalJs:js];
+}
+
+- (void)evalKeyboardHeightWillChangeWithHeight:(CGFloat)height
+{
+    NSString* js = [NSString stringWithFormat:
+        @"(function(){"
+         "if(window.cordova&&typeof cordova.fireWindowEvent==='function'){"
+         "cordova.fireWindowEvent('keyboardHeightWillChange',{'keyboardHeight':%f});"
+         "}"
+         "})();", height];
+
+    [self.commandDelegate evalJs:js];
 }
 
 #pragma mark Initialize
@@ -66,27 +93,27 @@
                                             object:nil
                                              queue:[NSOperationQueue mainQueue]
                                         usingBlock:^(NSNotification* notification) {
-            [weakSelf.commandDelegate evalJs:@"Keyboard.fireOnShow();"];
+            [weakSelf evalKeyboardEventWithMethod:@"fireOnShow" fallbackEvent:@"keyboardDidShow"];
                                         }];
     _keyboardHideObserver = [nc addObserverForName:UIKeyboardDidHideNotification
                                             object:nil
                                              queue:[NSOperationQueue mainQueue]
                                         usingBlock:^(NSNotification* notification) {
-            [weakSelf.commandDelegate evalJs:@"Keyboard.fireOnHide();"];
+            [weakSelf evalKeyboardEventWithMethod:@"fireOnHide" fallbackEvent:@"keyboardDidHide"];
                                         }];
 
     _keyboardWillShowObserver = [nc addObserverForName:UIKeyboardWillShowNotification
                                                 object:nil
                                                  queue:[NSOperationQueue mainQueue]
                                             usingBlock:^(NSNotification* notification) {
-            [weakSelf.commandDelegate evalJs:@"Keyboard.fireOnShowing();"];
+            [weakSelf evalKeyboardEventWithMethod:@"fireOnShowing" fallbackEvent:@"keyboardWillShow"];
             weakSelf.keyboardIsVisible = YES;
                                             }];
     _keyboardWillHideObserver = [nc addObserverForName:UIKeyboardWillHideNotification
                                                 object:nil
                                                  queue:[NSOperationQueue mainQueue]
                                             usingBlock:^(NSNotification* notification) {
-            [weakSelf.commandDelegate evalJs:@"Keyboard.fireOnHiding();"];
+            [weakSelf evalKeyboardEventWithMethod:@"fireOnHiding" fallbackEvent:@"keyboardWillHide"];
             weakSelf.keyboardIsVisible = NO;
                                             }];
 
@@ -99,7 +126,7 @@
                                                                  CGRect keyboard = ((NSValue*)notification.userInfo[@"UIKeyboardFrameEndUserInfoKey"]).CGRectValue;
                                                                  CGRect intersection = CGRectIntersection(screen, keyboard);
                                                                  CGFloat height = MIN(intersection.size.width, intersection.size.height);
-                                                                 [weakSelf.commandDelegate evalJs: [NSString stringWithFormat:@"cordova.fireWindowEvent('keyboardHeightWillChange', { 'keyboardHeight': %f })", height]];
+                                                                 [weakSelf evalKeyboardHeightWillChangeWithHeight:height];
                                                              }];
 
     self.webView.scrollView.delegate = self;
